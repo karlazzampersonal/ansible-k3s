@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: Karl Azzam
+  description: Install k3s server
+
+  license: license MIT
+
+  min_ansible_version: 2.1
+
+  galaxy_tags: []
+
+dependencies: []

@@ -1,0 +1,21 @@
+---
+- name: Teardown cluster
+  hosts: all
+  become: true
+  tasks:
+    # run uninstall script for all nodes
+    - name: Run K3s Uninstall script [server]
+      when: "'servers' in group_names"
+      ansible.builtin.command:
+        cmd: k3s-uninstall.sh
+        removes: /var/lib/rancher/k3s/*
+    # remove kubeconfig user
+    - name: Remove user kubeconfig
+      ansible.builtin.file:
+        path: ~{{ ansible_user }}/.kube/config
+        state: absent
+    # remove install script
+    - name: Remove k3s install script
+      ansible.builtin.file:
+        path: /usr/local/bin/k3s-install.sh
+        state: absent

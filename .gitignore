@@ -1,0 +1,10 @@
+*.retry
+*/__pycache__
+*.pyc
+.cache
+
+# macOS-specific files
+.DS_Store
+
+# intellij
+.idea

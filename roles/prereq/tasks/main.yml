@@ -1,0 +1,45 @@
+---
+# ensure all servers are on same timezone
+- name: Set same timezone on every Server
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+  when: (system_timezone is defined) and (system_timezone != "Your/Timezone")
+
+# needed for communication between pods running on different nodes/servers
+- name: Enable IPv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: true
+
+# populate ansible facts for nodes for subsequent tasks
+- name: Populate service facts
+  ansible.builtin.service_facts:
+
+# allow list of firewall rules to ensure correct ports are open for k3s
+- name: Allow UFW Exceptions
+  block:
+    - name: open api port
+      when:
+      ufw:
+        rule: allow
+        port: "{{ api_port }}"
+        proto: tcp
+
+    - name: open etcd ports
+      ufw:
+        rule: allow
+        port: "2379:2381"
+        proto: tcp
+
+    - name: allow default CIDRs
+      ufw:
+        rule: allow
+        src: '{{ item }}'
+      loop: "{{ (cluster_cidr + ',' + service_cidr) | split(',') }}"
+      notify: reload ufw
+
+- name: Gather the package facts
+  ansible.builtin.package_facts:
+    manager: auto

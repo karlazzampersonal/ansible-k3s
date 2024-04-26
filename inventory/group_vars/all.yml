@@ -1,0 +1,10 @@
+---
+############# pre-req role variables ################
+
+# timezone to make all nodes on the same system time
+system_timezone: Etc/UTC
+
+############# k3s_server role variables #############
+k3s_version: v1.26.9+k3s1
+api_endpoint: "{{ hostvars[groups['servers'][0]]['ansible_host'] | default(groups['servers'][0]) }}"
+extra_server_args: ""
