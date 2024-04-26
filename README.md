@@ -12,7 +12,7 @@ There are two ansible playbooks in here:
 
 ## Instructions
 
-Instructions can be found [here](https://homelab-coral.vercel.app/iac/ansible/##run-k3s-playbook) on how to run this playbook.
+Instructions can be found [here](https://homelab-coral.vercel.app/iac/ansible/#run-k3s-playbook) on how to run this playbook.
 
 ## Linting and syntax-check
 
