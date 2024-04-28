@@ -8,3 +8,6 @@
 
 # intellij
 .idea
+
+# kubeconfig file inside playbook
+playbook/kubeconfig

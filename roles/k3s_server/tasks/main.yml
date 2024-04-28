@@ -1,4 +1,5 @@
 ---
+
 - name: Stop k3s-init
   systemd:
     name: k3s-init
@@ -37,7 +38,6 @@
                       k3s server {{ server_init_args }}"
     creates: "{{ systemd_dir }}/k3s-init.service"
 
-# should verify correctly after around 17 retries left
 - name: Verification
   when: not ansible_check_mode
   block:
