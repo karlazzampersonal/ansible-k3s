@@ -19,7 +19,7 @@
 
 # allow list of firewall rules to ensure correct ports are open for k3s
 # note comment out until figure ufw firewall can work with this playbook
-#- name: Allow UFW Exceptions
+# - name: Allow UFW Exceptions
 #  block:
 #    - name: open api port
 #      when:

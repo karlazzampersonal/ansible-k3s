@@ -1,0 +1,52 @@
+---
+- name: Add cert-manager Helm repository
+  command: "helm repo add jetstack https://charts.jetstack.io"
+
+- name: Update helm repo
+  command: "helm repo update"
+
+- name: Check if cert-manager namespace already exists
+  command: "kubectl get namespace cert-manager"
+  register: cert_manager_namespace_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Create cert-manager namespace if it doesn't exist
+  command: "kubectl create namespace cert-manager"
+  when: cert_manager_namespace_check.rc != 0
+
+- name: Check if certificate resource was added
+  shell: "kubectl describe crd certificaterequests.cert-manager.io"
+  register: certificate_yaml_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply yaml that adds certificate (custom resource) if it doesn't exist
+  shell: "kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.5/cert-manager.crds.yaml"
+  when: certificate_yaml_exists.rc != 0
+
+- name: Check if cert-manager service exists
+  command: "kubectl get svc -n cert-manager cert-manager"
+  register: cert_manager_svc_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Install cert-manager with helm if doesn't exist
+  command: "helm install cert-manager jetstack/cert-manager --namespace cert-manager --values=../roles/cert_manager_install/files/values.yml --version v1.14.5"
+  when: cert_manager_svc_check.rc != 0
+
+- name: Generate secret-token-cf.yml
+  template:
+    src: "secret-token-cf.yml.j2"
+    dest: "../roles/cert_manager_install/files/issuers/secret-token-cf.yml"
+    mode: "0644"
+
+- name: Check if secret-cf-token.yml was applied
+  shell: "kubectl get secret cloudflare-token-secret -n cert-manager"
+  register: cf_secret_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply secret-token-cf.yml if it doesn't exist
+  shell: "kubectl apply -f ../roles/cert_manager_install/files/issuers/secret-token-cf.yml"
+  when: cf_secret_exists.rc != 0

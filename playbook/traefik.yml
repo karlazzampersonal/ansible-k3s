@@ -1,0 +1,31 @@
+---
+- name: Install pre-reqs such as helm and httpd
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: traefik_prereq
+
+- name: Install Traefik and its dashboard
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: traefik
+
+- name: Install Certmanager
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: cert_manager_install
+
+- name: Install Certmanager certificate for staging
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: cert_manager_staging
+
+- name: Install Certmanager certificate for production
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: cert_manager_production
+      when: create_production_cert | bool
