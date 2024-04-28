@@ -1,202 +1,170 @@
 ---
-# to make k3s install indempotent
-- name: Get k3s installed version
-  ansible.builtin.command: k3s --version
-  register: k3s_version_output
+
+- name: Stop k3s-init
+  systemd:
+    name: k3s-init
+    state: stopped
+  failed_when: false
+
+# k3s-init won't work if the port is already in use
+- name: Stop k3s
+  systemd:
+    name: k3s
+    state: stopped
+  failed_when: false
+
+- name: Clean previous runs of k3s-init  # noqa command-instead-of-module
+  # The systemd module does not support "reset-failed", so we need to resort to command.
+  command: systemctl reset-failed k3s-init
+  failed_when: false
   changed_when: false
-  ignore_errors: true
 
-# to make k3s install indempotent
-- name: Set k3s installed version
-  when: k3s_version_output.rc == 0
-  ansible.builtin.set_fact:
-    installed_k3s_version: "{{ k3s_version_output.stdout_lines[0].split(' ')[2] }}"
+- name: Deploy K3s http_proxy conf
+  include_tasks: http_proxy.yml
+  when: proxy_env is defined
 
-# download k3s binary if not already installed
-- name: Download artifact only if needed
-  when: k3s_version_output.rc != 0 or installed_k3s_version is version(k3s_version, '<')
+- name: Deploy vip manifest
+  include_tasks: vip.yml
+
+- name: Deploy metallb manifest
+  include_tasks: metallb.yml
+  tags: metallb
+
+- name: Init cluster inside the transient k3s-init service
+  command:
+    cmd: "systemd-run -p RestartSec=2 \
+                      -p Restart=on-failure \
+                      --unit=k3s-init \
+                      k3s server {{ server_init_args }}"
+    creates: "{{ systemd_dir }}/k3s-init.service"
+
+- name: Verification
+  when: not ansible_check_mode
   block:
-    - name: Download K3s install script
-      ansible.builtin.get_url:
-        url: https://get.k3s.io/
-        timeout: 120
-        dest: /usr/local/bin/k3s-install.sh
-        owner: root
-        group: root
-        mode: 0755
-
-    - name: Download K3s binary
-      ansible.builtin.command:
-        cmd: /usr/local/bin/k3s-install.sh
-      environment:
-        INSTALL_K3S_SKIP_START: "true"
-        INSTALL_K3S_VERSION: "{{ k3s_version }}"
-      changed_when: true
-
-# init first node as controller node
-- name: Init first server node
-  when: inventory_hostname == groups['servers'][0]
-  block:
-    # copies the K3s template file to the systemd directory
-    - name: Copy K3s service file [Single]
-      when: groups['servers'] | length == 1
-      ansible.builtin.template:
-        src: "k3s-single.service.j2"
-        dest: "{{ systemd_dir }}/k3s.service"
-        owner: root
-        group: root
-        mode: 0644
-
-    # copies the K3s template file to the systemd directory
-    - name: Copy K3s service file [HA]
-      when: groups['servers'] | length > 1
-      ansible.builtin.template:
-        src: "k3s-cluster-init.service.j2"
-        dest: "{{ systemd_dir }}/k3s.service"
-        owner: root
-        group: root
-        mode: 0644
-
-    # start up k3s on the first node!
-    - name: Enable and check K3s service
-      ansible.builtin.systemd:
-        name: k3s
-        daemon_reload: true
-        state: started
-        enabled: true
-
-    # give it time to start up
-    - name: Pause to allow first server startup
-      when: (groups['servers'] | length) > 1
-      ansible.builtin.pause:
-        seconds: 10
-
-    # check if kubectl installed
-    - name: Check whether kubectl is installed on control node
-      ansible.builtin.command: 'kubectl'
-      register: kubectl_installed
-      ignore_errors: true
-      delegate_to: 127.0.0.1
-      become: false
-      changed_when: false
-
-    # needed for controller node to interact with rest of cluster
-    - name: Apply K3S kubeconfig to control node
-      when: kubectl_installed.rc == 0
-      block:
-        # fetch the K3s kubeconfig file
-        - name: Copy kubeconfig to control node
-          ansible.builtin.fetch:
-            src: /etc/rancher/k3s/k3s.yaml
-            dest: "{{ kubeconfig }}"
-            flat: true
-
-        # modify server addr to match up full api endpoint context path with port
-        - name: Change server address in kubeconfig on control node
-          ansible.builtin.shell: |
-            KUBECONFIG={{ kubeconfig }} kubectl config set-cluster default --server=https://{{ api_endpoint }}:{{ api_port }}
-          delegate_to: 127.0.0.1
-          become: false
-          register: csa_result
-          changed_when:
-            - csa_result.rc == 0
-
-        - name: Setup kubeconfig context on control node - {{ cluster_context }}
-          when: kubeconfig != "~/.kube/config"
-          ansible.builtin.replace:
-            path: "{{ kubeconfig }}"
-            regexp: 'name: default'
-            replace: 'name: {{ cluster_context }}'
-          delegate_to: 127.0.0.1
-          become: false
-
-        - name: Merge with any existing kubeconfig on control node
-          when: kubeconfig != "~/.kube/config"
-          ansible.builtin.shell: |
-            TFILE=$(mktemp)
-            KUBECONFIG={{ kubeconfig }} kubectl config set-context {{ cluster_context }} --user={{ cluster_context }} --cluster={{ cluster_context }}
-            KUBECONFIG={{ kubeconfig }} kubectl config view --flatten > ${TFILE}
-            mv ${TFILE} {{ kubeconfig }}
-          delegate_to: 127.0.0.1
-          become: false
-          register: mv_result
-          changed_when:
-            - mv_result.rc == 0
-
-# start all other servers
-- name: Start other servers
-  when:
-    - inventory_hostname != groups['servers'][0]
-  block:
-    # copies the K3s template file to the systemd directory
-    - name: Copy K3s service file [HA]
-      ansible.builtin.template:
-        src: "k3s-ha.service.j2"
-        dest: "{{ systemd_dir }}/k3s.service"
-        owner: root
-        group: root
-        mode: 0644
-
-    # start up k3s!
-    - name: Enable and check K3s service
-      ansible.builtin.systemd:
-        name: k3s
-        daemon_reload: true
-        state: started
-        enabled: true
-
-    # keep retrying until all server nodes are reachable
-    - name: Verify that all server nodes joined
-      ansible.builtin.command:
-        cmd: >
-          k3s kubectl get nodes -l "node-role.kubernetes.io/control-plane=true" -o=jsonpath="{.items[*].metadata.name}"
+    - name: Verify that all nodes actually joined (check k3s-init.service if this fails)
+      command:
+        cmd: k3s kubectl get nodes -l "node-role.kubernetes.io/master=true" -o=jsonpath="{.items[*].metadata.name}"
       register: nodes
-      until: nodes.rc == 0 and (nodes.stdout.split() | length) == (groups['servers'] | length)
-      retries: 20
+      until: nodes.rc == 0 and (nodes.stdout.split() | length) == (groups[group_name_master | default('master')] | length)  # yamllint disable-line rule:line-length
+      retries: "{{ retry_count | default(20) }}"
       delay: 10
       changed_when: false
+  always:
+    - name: Save logs of k3s-init.service
+      include_tasks: fetch_k3s_init_logs.yml
+      when: log_destination
+      vars:
+        log_destination: >-
+          {{ lookup('ansible.builtin.env', 'ANSIBLE_K3S_LOG_DIR', default=False) }}
+    - name: Kill the temporary service used for initialization
+      systemd:
+        name: k3s-init
+        state: stopped
+      failed_when: false
 
-# setup kubectl for the ubuntu user so we can access the cluster vi the cli
-- name: Setup kubectl for user
-  when: user_kubectl
-  block:
+- name: Copy K3s service file
+  register: k3s_service
+  template:
+    src: "k3s.service.j2"
+    dest: "{{ systemd_dir }}/k3s.service"
+    owner: root
+    group: root
+    mode: 0644
 
-    # create sysmlink for kubectl
-    - name: Create kubectl symlink
-      when: lookup('fileglob', '/usr/local/bin/kubectl', errors='warn') | length == 0
-      ansible.builtin.file:
-        src: /usr/local/bin/k3s
-        dest: /usr/local/bin/kubectl
-        state: link
+- name: Enable and check K3s service
+  systemd:
+    name: k3s
+    daemon_reload: true
+    state: restarted
+    enabled: true
 
-    # create .kube directory where we will store our kubectl config
-    - name: Create directory .kube
-      ansible.builtin.file:
-        path: ~{{ ansible_user }}/.kube
-        state: directory
-        owner: "{{ ansible_user }}"
-        mode: "u=rwx,g=rx,o="
+- name: Wait for node-token
+  wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
 
-    # add config file
-    - name: Copy config file to user home directory
-      ansible.builtin.copy:
-        src: /etc/rancher/k3s/k3s.yaml
-        dest: ~{{ ansible_user }}/.kube/config
-        remote_src: true
-        owner: "{{ ansible_user }}"
-        mode: "u=rw,g=,o="
+- name: Register node-token file access mode
+  stat:
+    path: /var/lib/rancher/k3s/server
+  register: p
 
-    # we only need one kubeconfig file since only 1 k3s cluster, set it to default
-    - name: Configure default KUBECONFIG for user
-      ansible.builtin.lineinfile:
-        path: ~{{ ansible_user }}/.bashrc
-        regexp: 'export KUBECONFIG=~/.kube/config'
-        line: 'export KUBECONFIG=~/.kube/config # Added by k3s-ansible'
-        state: present
+- name: Change file access node-token
+  file:
+    path: /var/lib/rancher/k3s/server
+    mode: "g+rx,o+rx"
 
-    # autocomplete via tabbing to make using kubectl easier
-    - name: Configure kubectl autocomplete
-      ansible.builtin.lineinfile:
-        path: ~{{ ansible_user }}/.bashrc
-        regexp: '\.\s+<\(kubectl completion bash\)'
-        line: ". <(kubectl completion bash)  # Added by k3s-ansible"
+- name: Read node-token from master
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: node_token
+
+- name: Store Master node-token
+  set_fact:
+    token: "{{ node_token.content | b64decode | regex_replace('\n', '') }}"
+
+- name: Restore node-token file access
+  file:
+    path: /var/lib/rancher/k3s/server
+    mode: "{{ p.stat.mode }}"
+
+- name: Create directory .kube
+  file:
+    path: "{{ ansible_user_dir }}/.kube"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "u=rwx,g=rx,o="
+
+- name: Copy config file to user home directory
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ ansible_user_dir }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user_id }}"
+    mode: "u=rw,g=,o="
+
+- name: Configure kubectl cluster to {{ endpoint_url }}
+  command: >-
+    k3s kubectl config set-cluster default
+      --server={{ endpoint_url }}
+      --kubeconfig {{ ansible_user_dir }}/.kube/config
+  changed_when: true
+  vars:
+    endpoint_url: >-
+      https://{{ apiserver_endpoint | ansible.utils.ipwrap }}:6443
+  # Deactivated linter rules:
+  #   - jinja[invalid]: As of version 6.6.0, ansible-lint complains that the input to ipwrap
+  #                     would be undefined. This will not be the case during playbook execution.
+  # noqa jinja[invalid]
+
+- name: Create kubectl symlink
+  file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/kubectl
+    state: link
+
+- name: Create crictl symlink
+  file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/crictl
+    state: link
+
+- name: Get contents of manifests folder
+  find:
+    paths: /var/lib/rancher/k3s/server/manifests
+    file_type: file
+  register: k3s_server_manifests
+
+- name: Get sub dirs of manifests folder
+  find:
+    paths: /var/lib/rancher/k3s/server/manifests
+    file_type: directory
+  register: k3s_server_manifests_directories
+
+- name: Remove manifests and folders that are only needed for bootstrapping cluster so k3s doesn't auto apply on start
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items:
+    - "{{ k3s_server_manifests.files }}"
+    - "{{ k3s_server_manifests_directories.files }}"
+  loop_control:
+    label: "{{ item.path }}"
