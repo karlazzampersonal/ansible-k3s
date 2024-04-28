@@ -11,19 +11,19 @@
   roles:
     - role: traefik
 
-- name: Install Certmanager
+- name: Install cert-manager
   hosts: localhost
   gather_facts: false
   roles:
     - role: cert_manager_install
 
-- name: Install Certmanager certificate for staging
+- name: Install cert-manager certificate for staging
   hosts: localhost
   gather_facts: false
   roles:
     - role: cert_manager_staging
 
-- name: Install Certmanager certificate for production
+- name: Install cert-manager certificate for production
   hosts: localhost
   gather_facts: false
   roles:
