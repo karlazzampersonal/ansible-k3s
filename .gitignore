@@ -11,3 +11,14 @@
 
 # kubeconfig file inside playbook
 playbook/kubeconfig
+
+# some files for dashnboard are auto-generated
+roles/traefik/files/dashboard/secret-dashboard.yml
+roles/traefik/files/dashboard/ingress.yml
+roles/cert_manager_install/files/issuers/secret-token-cf.yml
+roles/cert_manager_staging/files/issuers/letsencrypt-staging.yml
+roles/cert_manager_staging/files/certificates/staging/staging-certificate.yml
+roles/cert_manager_production/files/issuers/letsencrypt-production.yml
+roles/cert_manager_production/files/certificates/production/production-certificate.yml
+
+tmp

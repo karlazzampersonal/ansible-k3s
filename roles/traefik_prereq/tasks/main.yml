@@ -1,0 +1,32 @@
+---
+- name: Check if Homebrew is installed
+  command: /usr/bin/which brew
+  register: "brew_check"
+  ignore_errors: true
+
+- name: Install Homebrew if not already installed
+  command: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  when: brew_check.rc != 0
+
+- name: Update Homebrew
+  command: "brew update"
+
+- name: Check if Helm is already installed
+  command: "helm version"
+  ignore_errors: true
+  register: helm_is_installed
+  changed_when: false
+
+- name: Install Helm using Homebrew if not already installed
+  command: "brew install helm"
+  when: helm_is_installed.rc != 0
+
+- name: Check if httpd is already installed
+  command: "which htpasswd"
+  ignore_errors: true
+  register: httpd_check
+  changed_when: false
+
+- name: Install httpd using Homebrew if not already installed
+  command: "brew install httpd"
+  when: httpd_check.stdout.find('htpasswd not found') != -1

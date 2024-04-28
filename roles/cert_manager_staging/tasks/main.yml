@@ -1,0 +1,33 @@
+---
+- name: Generate letsencrypt-staging.yml
+  template:
+    src: "letsencrypt-staging.yml.j2"
+    dest: "../roles/cert_manager_staging/files/issuers/letsencrypt-staging.yml"
+    mode: "0644"
+
+- name: Check if letsencrypt-staging.yml was applied
+  shell: "kubectl get clusterissuer letsencrypt-staging -o yaml"
+  register: letsencrypt_staging_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply letsencrypt-staging.yml if it doesn't exist
+  shell: "kubectl apply -f ../roles/cert_manager_staging/files/issuers/letsencrypt-staging.yml"
+  when: letsencrypt_staging_exists.rc != 0
+
+- name: Generate staging-certificate.yml
+  template:
+    src: "staging-certificate.yml.j2"
+    dest: "../roles/cert_manager_staging/files/certificates/staging/staging-certificate.yml"
+    mode: "0644"
+
+- name: Check if certificate exists
+  ansible.builtin.command:
+    cmd: "kubectl get certificate {{ staging_secret_name }}"
+  register: challenges_output
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply staging-certificate.yml if it doesn't exist
+  shell: "kubectl apply -f ../roles/cert_manager_staging/files/certificates/staging/staging-certificate.yml"
+  when: challenges_output.rc != 0

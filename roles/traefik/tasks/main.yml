@@ -1,0 +1,101 @@
+---
+- name: Add Traefik Helm repository
+  command: "helm repo add traefik https://helm.traefik.io/traefik"
+
+- name: Update helm repo
+  command: "helm repo update"
+
+- name: Check if Traefik namespace already exists
+  command: "kubectl get namespace traefik"
+  register: traefik_namespace_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Create Traefik namespace if it doesn't exist
+  command: "kubectl create namespace traefik"
+  when: traefik_namespace_check.rc != 0
+
+- name: Check if Traefik service exists
+  command: "kubectl get svc -n traefik traefik"
+  register: traefik_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Install Traefik via Helm if it doesn't exist
+  command: "helm install --namespace=traefik traefik traefik/traefik --values=../roles/traefik/files/values.yml"
+  when: traefik_check.rc != 0
+
+- name: Check if Traefik middleware exists
+  command: "kubectl get middleware -o jsonpath='{.items}'"
+  register: middleware_check
+  changed_when: false
+
+- name: Apply default headers configuration if middleware doesn't exist
+  command: "kubectl apply -f ../roles/traefik/files/default-headers.yml"
+  when: middleware_check.stdout.find('[]') != -1
+
+- name: Generate htpasswd command
+  set_fact:
+    htpasswd_command: "htpasswd -nb {{ username }} {{ password }}"
+
+- name: Run htpasswd command
+  command: "{{ htpasswd_command }}"
+  register: htpasswd_output
+
+- name: Base64 encode htpasswd output
+  ansible.builtin.shell:
+    cmd: "echo '{{ htpasswd_output.stdout }}' | openssl base64"
+  register: base64_output
+
+- name: Generate secret-dashboard.yml
+  template:
+    src: "secret-dashboard.yml.j2"
+    dest: "../roles/traefik/files/dashboard/secret-dashboard.yml"
+    mode: "0644"
+  vars:
+    base64_output: "{{ base64_output }}"
+
+- debug:
+    msg: "{{ base64_output.stdout }}"
+
+- name: Generate secret-dashboard.yml
+  template:
+    src: "secret-dashboard.yml.j2"
+    dest: "../roles/traefik/files/dashboard/secret-dashboard.yml"
+    mode: "0644"
+
+- name: Check if secret-dashboard.yaml was applied
+  shell: "kubectl get secret traefik-dashboard-auth -n traefik"
+  register: secret_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply secret-dashboard.yaml if it doesn't exist
+  shell: "kubectl apply -f ../roles/traefik/files/dashboard/secret-dashboard.yml"
+  when: secret_exists.rc != 0
+
+- name: Check if middleware.yaml was applied
+  shell: "kubectl describe middleware traefik-dashboard-basicauth -n traefik"
+  register: middleware_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply middleware.yaml if it doesn't exist
+  shell: "kubectl apply -f ../roles/traefik/files/dashboard/middleware.yml"
+  when: middleware_exists.rc != 0
+
+- name: Generate ingress.yml
+  template:
+    src: "ingress-dashboard.yml.j2"
+    dest: "../roles/traefik/files/dashboard/ingress.yml"
+    mode: "0644"
+
+- name: Check if ingress.yaml was applied
+  shell: "kubectl describe ingressroute traefik-dashboard -n traefik"
+  register: ingress_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply ingress.yaml if it doesn't exist
+  shell: "kubectl apply -f ../roles/traefik/files/dashboard/ingress.yml"
+  when: ingress_exists.rc != 0

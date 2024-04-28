@@ -1,0 +1,15 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "{{  metadata_name_staging }}"
+  namespace: default
+spec:
+  secretName: "{{ staging_secret_name }}"
+  issuerRef:
+    name: "{{ staging_issuer_ref }}"
+    kind: ClusterIssuer
+  commonName: "{{ common_name }}"
+  dnsNames:
+    - "{{ dns_name_1 }}"
+    - "{{ dns_name_2 }}"

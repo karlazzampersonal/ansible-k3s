@@ -1,0 +1,33 @@
+---
+- name: Generate letsencrypt-production.yml
+  template:
+    src: "letsencrypt-production.yml.j2"
+    dest: "../roles/cert_manager_production/files/issuers/letsencrypt-production.yml"
+    mode: "0644"
+
+- name: Check if letsencrypt-production.yml was applied
+  shell: "kubectl get clusterissuer letsencrypt-production -o yaml"
+  register: letsencrypt_production_exists
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply letsencrypt-production.yml if it doesn't exist
+  shell: "kubectl apply -f ../roles/cert_manager_production/files/issuers/letsencrypt-production.yml"
+  when: letsencrypt_production_exists.rc != 0
+
+- name: Generate production-certificate.yml
+  template:
+    src: "production-certificate.yml.j2"
+    dest: "../roles/cert_manager_production/files/certificates/production/production-certificate.yml"
+    mode: "0644"
+
+- name: Check if certificate exists
+  ansible.builtin.command:
+    cmd: "kubectl get certificate {{ production_secret_name }}"
+  register: challenges_output
+  ignore_errors: true
+  changed_when: false
+
+- name: Apply production-certificate.yml if it doesn't exist
+  shell: "kubectl apply -f ../roles/cert_manager_production/files/certificates/production/production-certificate.yml"
+  when: challenges_output.rc != 0
