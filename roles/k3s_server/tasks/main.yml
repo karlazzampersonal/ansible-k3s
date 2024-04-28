@@ -28,12 +28,6 @@
 - name: Deploy metallb manifest
   include_tasks: metallb.yml
   tags: metallb
-#  when: kube_vip_lb_ip_range is not defined and (not cilium_bgp or cilium_iface is not defined)
-
-#- name: Deploy kube-vip manifest
-#  include_tasks: kube-vip.yml
-#  tags: kubevip
-#  when: kube_vip_lb_ip_range is defined
 
 - name: Init cluster inside the transient k3s-init service
   command:
@@ -43,6 +37,7 @@
                       k3s server {{ server_init_args }}"
     creates: "{{ systemd_dir }}/k3s-init.service"
 
+# should verify correctly after around 17 retries left
 - name: Verification
   when: not ansible_check_mode
   block:
