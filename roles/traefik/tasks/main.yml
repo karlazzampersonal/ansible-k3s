@@ -22,7 +22,7 @@
   changed_when: false
 
 - name: Install Traefik via Helm if it doesn't exist
-  command: "helm install --namespace=traefik traefik traefik/traefik --values=../roles/traefik/files/values.yml"
+  command: "helm install --namespace=traefik traefik traefik/traefik --version {{ helm_version }} --values=../roles/traefik/files/values.yml"
   when: traefik_check.rc != 0
 
 - name: Check if Traefik middleware exists
