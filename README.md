@@ -92,6 +92,7 @@ localhost
   username: "karl"
   password: "password"
   ingress_subdomain: "local.example.com"
+  helm_version: "27.0.2"
   
   # cert-manager variables
   email: "example@gmail.com"
