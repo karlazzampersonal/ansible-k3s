@@ -42,7 +42,7 @@ metal_lb_speaker_tag_version: "v0.14.3"
 metal_lb_controller_tag_version: "v0.14.3"
 
 # metallb ip range for load balancer, make sure these ips are in the same cidr block as yours
-metal_lb_ip_range: "192.168.1.80-192.168.1.90"
+metal_lb_ip_range: "192.168.1.60-192.168.1.70"
 
 ############# k3s_agent role variables #############
 extra_agent_args: >-
