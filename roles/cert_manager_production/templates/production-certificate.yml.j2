@@ -13,3 +13,8 @@ spec:
   dnsNames:
     - "{{ dns_name_1 }}"
     - "{{ dns_name_2 }}"
+  secretTemplate:
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "argocd,media,traefik,observability,uptime-kuma"  # Control destination namespaces
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true" # Auto create reflection for matching namespaces

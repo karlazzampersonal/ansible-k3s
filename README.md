@@ -125,6 +125,11 @@ localhost
   - download- Another role to run before creating k3s cluster. It downloads the binary files for k3s
   - k3s_server- Spin our k3s cluster. It installs the binary, starts up each node, and setups up kubectl in each node. It sets up MetalLB as the service load balancer and kube-vip as the control plane load balancer.
   - k3s_server-post- Deploy MetalLB pool of ips set in inventory all.yml
+  - traefik_pre_req - Install helm and other dependencies like Reflector to reflect secrets across namespaces
+  - traefik - Install traefik ingress controller
+  - cert_manager_install - Install cert manager
+  - cert_manager_staging - setup certificate with letsencrypt test via staging
+  - cert_manager_production- Setup certificate with letsencrypt for auto generated certs
   - reset- Destroy cluster and all associated files
 
 ## Extra config

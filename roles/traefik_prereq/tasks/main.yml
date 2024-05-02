@@ -30,3 +30,12 @@
 - name: Install httpd using Homebrew if not already installed
   command: "brew install httpd"
   when: httpd_check.stdout.find('htpasswd not found') != -1
+
+- name: Add helm repo Reflector needed to reflect cert manager secret across all namespaces
+  command: helm repo add emberstack https://emberstack.github.io/helm-charts
+
+- name: Update helm repo
+  command: "helm repo update"
+
+- name: Install Reflector
+  command: "helm upgrade --install reflector emberstack/reflector"
